@@ -1,6 +1,9 @@
 #include "foobar.h"
 
 pthread_mutex_t foo_mutex;
+pthread_cond_t foo_cond;
+pthread_cond_t bar_cond;
+
 int flag_foo;
 int flag_bar;
 
@@ -26,6 +29,8 @@ int main(int argc, char** argv)
 	pthread_t pthread[2];
 
 	pthread_mutex_init(&foo_mutex, NULL);
+	pthread_cond_init(&foo_cond, NULL);
+	pthread_cond_init(&bar_cond, NULL);
 	
 	flag_foo = 1;
 	flag_bar = 0;
@@ -75,23 +80,36 @@ void* print_foo(void* ptr)
 #ifdef _ENABLE_LOGS_THREAD_INFO_
 	printf("thread: [%ld] function: [%s] line: [%d] after mutex lock\n", pthread_self(), __func__, __LINE__);
 #endif
-
-		if(flag_foo == 1)
-		{
-			printcount++;
-			printf("Line %d: foo ", printcount);
-			flag_bar = 1;
-			flag_foo = 0;
+		while(flag_foo != 1 && flag_bar == 1)
+			pthread_cond_wait(&foo_cond, &foo_mutex);
 #ifdef _ENABLE_LOGS_THREAD_INFO_
-	printf("thread: [%ld] function: [%s] line: [%d] before foo_cond signal\n", pthread_self(), __func__, __LINE__);
+	printf("thread: [%ld] function: [%s] line: [%d] after foo cond wait\n", pthread_self(), __func__, __LINE__);
 #endif
-		}
 		pthread_mutex_unlock(&foo_mutex);
-		if(printcount == *freq)
-			break;
 #ifdef _ENABLE_LOGS_THREAD_INFO_
 	printf("thread: [%ld] function: [%s] line: [%d] after mutex unlock\n", pthread_self(), __func__, __LINE__);
 #endif
+		
+		printcount++;
+		printf("Line %d: foo ", printcount);
+	
+		pthread_mutex_lock(&foo_mutex);
+		flag_bar = 1;
+		flag_foo = 0;
+#ifdef _ENABLE_LOGS_THREAD_INFO_
+	printf("thread: [%ld] function: [%s] line: [%d] after mutex lock\n", pthread_self(), __func__, __LINE__);
+#endif
+		pthread_cond_signal(&bar_cond);
+#ifdef _ENABLE_LOGS_THREAD_INFO_
+	printf("thread: [%ld] function: [%s] line: [%d] after bar cond signal \n", pthread_self(), __func__, __LINE__);
+#endif
+		pthread_mutex_unlock(&foo_mutex);
+#ifdef _ENABLE_LOGS_THREAD_INFO_
+	printf("thread: [%ld] function: [%s] line: [%d] after mutex unlock\n", pthread_self(), __func__, __LINE__);
+#endif
+
+		if(printcount == *freq)
+			break;
 	}
 #ifdef _ENABLE_LOGS_INFO_
 	printf("thread: [%ld] function: [%s] line: [%d] exit\n", pthread_self(), __func__, __LINE__);
@@ -106,25 +124,42 @@ void* print_bar(void* ptr)
 #endif
 	int* freq = (int*)ptr;
 	int printcount = 0;
+
 	while(1)
 	{
 		pthread_mutex_lock(&foo_mutex);
 #ifdef _ENABLE_LOGS_THREAD_INFO_
 	printf("thread: [%ld] function: [%s] line: [%d] after mutex lock\n", pthread_self(), __func__, __LINE__);
 #endif
-		if(flag_bar == 1)
-		{
-			printcount++;
-			printf("bar\n");
-			flag_bar = 0;
-			flag_foo = 1;
-		}
+		while(flag_bar != 1 && flag_foo == 1)
+			pthread_cond_wait(&bar_cond, &foo_mutex);
+#ifdef _ENABLE_LOGS_THREAD_INFO_
+	printf("thread: [%ld] function: [%s] line: [%d] after bar cond wait\n", pthread_self(), __func__, __LINE__);
+#endif
 		pthread_mutex_unlock(&foo_mutex);
-		if(printcount == *freq)
-			break;
 #ifdef _ENABLE_LOGS_THREAD_INFO_
 	printf("thread: [%ld] function: [%s] line: [%d] after mutex unlock\n", pthread_self(), __func__, __LINE__);
 #endif
+		printcount++;
+		printf("bar\n");
+
+		pthread_mutex_lock(&foo_mutex);
+#ifdef _ENABLE_LOGS_THREAD_INFO_
+	printf("thread: [%ld] function: [%s] line: [%d] after mutex lock\n", pthread_self(), __func__, __LINE__);
+#endif
+		flag_bar = 0;
+		flag_foo = 1;
+		pthread_cond_signal(&foo_cond);
+#ifdef _ENABLE_LOGS_THREAD_INFO_
+	printf("thread: [%ld] function: [%s] line: [%d] after foo cond signal \n", pthread_self(), __func__, __LINE__);
+#endif
+		pthread_mutex_unlock(&foo_mutex);
+#ifdef _ENABLE_LOGS_THREAD_INFO_
+	printf("thread: [%ld] function: [%s] line: [%d] after mutex unlock\n", pthread_self(), __func__, __LINE__);
+#endif
+
+		if(printcount == *freq)
+			break;
 	}
 #ifdef _ENABLE_LOGS_INFO_
 	printf("thread: [%ld] function: [%s] line: [%d] exit\n", pthread_self(), __func__, __LINE__);
